@@ -47,7 +47,7 @@ struct Temps {
     temp_min: f64,
     temp_max: f64,
     pressure: f64,
-    humidity: i32,
+    humidity: f64,
 }
 #[derive(Debug, Deserialize, Serialize)]
 struct Wind {
@@ -79,12 +79,8 @@ impl Forecast {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), ExitFailure>{
-    let args = Cli::from_args();
-    let response = Forecast::get(&args.city, &args.country_code).await?;
-
-    let direction = match response.wind.deg {
+fn get_wind_direction(wind_deg: f64) -> &'static str {
+    let direction = match wind_deg {
         deg if deg < 11.25 => "North",
         deg if deg < 33.75 => "North-Northeast",
         deg if deg < 56.25 => "Northeast",
@@ -105,8 +101,42 @@ async fn main() -> Result<(), ExitFailure>{
         deg if deg > 360.00 => "this must be an error",
         _ => "Invalid input",
     };
+    direction
+}
 
-    println!("our city: {}, our country: {}, temp: {}", args.city, args.country_code, response.main.feels_like);
-    println!("wind speed: {} km/h, wind_derction: {}", (response.wind.speed * 3.6).round(), direction);
+fn comfort_level(humidity: f64) -> &'static str {
+    match humidity {
+        level if level <= 20.0 => "Very low humidity, dry conditions",
+        level if level <= 40.0 => "Low humidity, generally comfortable",
+        level if level <= 60.0 => "Moderate humidity, pleasant",
+        level if level <= 75.0 => "High humidity, may feel a bit sticky",
+        level if level <= 90.0 => "Very high humidity, uncomfortable",
+        _ => "Extremely high humidity, oppressive",
+    }
+}
+
+fn swimming_conditions(wind_speed: f64) -> &'static str {
+    match wind_speed {
+        speed if speed <= 10.0 => "Calm conditions, minimal impact on swimming",
+        speed if speed <= 20.0 => "Gentle breeze, slight ripples, suitable for swimming",
+        speed if speed <= 30.0 => "Moderate breeze, small waves may form",
+        speed if speed <= 40.0 => "Increasing breeze, potential for slightly choppy water",
+        speed if speed <= 50.0 => "Moderate winds, water choppy, swimming more challenging",
+        _ => "High winds, rough water, not recommended for swimming",
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), ExitFailure>{
+    let args = Cli::from_args();
+    let response = Forecast::get(&args.city, &args.country_code).await?;
+
+    let wind_direction = get_wind_direction(response.wind.deg);
+    let swimming_conditions = swimming_conditions(response.wind.speed * 3.6);
+    let comfort_level = comfort_level(response.main.humidity);
+    
+    println!("our city: {}, our country: {}, temp: {}", args.city, args.country_code, response.main.temp);
+    println!("humidity: {} %, how it feels: {}", response.main.humidity, comfort_level);
+    println!("wind speed: {:.2} km/h, wind_derction: {}, swimming_conditions: {}", (response.wind.speed * 3.6), wind_direction, swimming_conditions);
     Ok(())
 }
